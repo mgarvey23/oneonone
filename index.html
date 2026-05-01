@@ -113,6 +113,18 @@
 
   .footer { text-align:center; color:var(--muted); padding:16px; font-size:12px; }
 
+  /* Window-slot booking list */
+  .slot.window { flex-direction:column; align-items:stretch; }
+  .slot.window .head { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .window-list { margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); }
+  .window-list .empty { font-size:12px; color:var(--muted); font-style:italic; }
+  .window-item { display:flex; justify-content:space-between; align-items:flex-start; gap:8px;
+    padding:6px 8px; background:#F0F2F7; border-radius:6px; margin-bottom:6px; font-size:13px; }
+  .window-item:last-child { margin-bottom:0; }
+  .window-item .wt { font-weight:600; color:var(--burn-dark); }
+  .window-item .tag { background:#9AA7BD; color:#fff; padding:3px 8px; border-radius:4px;
+    font-weight:600; font-size:10px; letter-spacing:0.04em; text-transform:uppercase; }
+
   /* Role visibility */
   body.guest .jordan-only { display:none; }
   body.jordan .guest-only { display:none; }
@@ -192,6 +204,10 @@
 
       <h3>All confirmed bookings</h3>
       <div id="confirmed"></div>
+
+      <h3 style="margin-top:24px;">Testing</h3>
+      <p class="muted">Wipes every booking and pending request. Only affects this device.</p>
+      <button id="reset-btn" class="btn danger">Reset all slots</button>
     </div>
   </main>
 
@@ -206,10 +222,14 @@
     <p class="where" id="modal-where"></p>
     <form id="book-form">
       <input type="hidden" name="slotId" />
+      <label id="time-field" class="hidden">What 1-hour time frame would you like?
+        <input type="text" name="time" maxlength="40" placeholder="e.g., 10:00 AM – 11:00 AM" />
+        <small id="time-hint" class="muted" style="font-weight:500;font-size:12px;display:block;margin-top:4px;"></small>
+      </label>
       <label>Your name <input type="text" name="name" required maxlength="80" /></label>
       <label>Comments / focus areas
         <textarea name="notes" maxlength="500" rows="3"
-          placeholder="Anything Jordan should know? Start time within an open window?"></textarea>
+          placeholder="Anything Jordan should know?"></textarea>
       </label>
       <label class="check">
         <input type="checkbox" name="bc" />
@@ -238,8 +258,8 @@ const SLOTS = [
   { id:'wed-1130', day:'Wednesday', date:'5/6', label:'11:30 AM – 12:30 PM' },
   { id:'wed-1400', day:'Wednesday', date:'5/6', label:'2:00 PM – 3:00 PM' },
   { id:'wed-1500', day:'Wednesday', date:'5/6', label:'3:00 PM – 4:00 PM' },
-  { id:'thu-open', day:'Thursday',  date:'5/7', label:'Anytime after 9:00 AM' },
-  { id:'fri-open', day:'Friday',    date:'5/8', label:'Anytime BEFORE 2:00 PM' },
+  { id:'thu-open', day:'Thursday',  date:'5/7', label:'Anytime after 9:00 AM', window:true, windowHint:'Pick a 1-hour block starting 9:00 AM or later' },
+  { id:'fri-open', day:'Friday',    date:'5/8', label:'Anytime BEFORE 2:00 PM', window:true, windowHint:'Pick a 1-hour block ending by 2:00 PM' },
   { id:'sat-1000', day:'Saturday',  date:'5/9', label:'10:00 AM – 11:00 AM' }
 ];
 const DAY_ORDER = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -251,10 +271,12 @@ let session = null;
 let data = load();
 
 function load() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || empty(); }
-  catch { return empty(); }
+  try {
+    const d = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+    return { ...empty(), ...d };
+  } catch { return empty(); }
 }
-function empty() { return { confirmed:{}, customApproved:[], customRequests:[] }; }
+function empty() { return { confirmed:{}, windows:{}, customApproved:[], customRequests:[] }; }
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
 
 // ---------- Helpers ----------
@@ -312,7 +334,12 @@ function allSlots() {
     id:c.id, day:c.day, date:c.date, label:c.label, isCustom:true,
     booking:{ name:c.name, notes:c.notes, bc:c.bc }
   }));
-  const listed = SLOTS.map(s => ({ ...s, booking: data.confirmed[s.id] || null }));
+  const listed = SLOTS.map(s => {
+    if (s.window) {
+      return { ...s, windowBookings: data.windows[s.id] || [] };
+    }
+    return { ...s, booking: data.confirmed[s.id] || null };
+  });
   return [...listed, ...customSlots];
 }
 
@@ -344,6 +371,32 @@ function renderSlots() {
 
 function slotHtml(s, isJordan) {
   const customCls = s.isCustom ? ' custom' : '';
+
+  // Window slot: always bookable, lists each chosen 1-hour block
+  if (s.window) {
+    const list = (s.windowBookings || []).map(b => `
+      <div class="window-item">
+        <div>
+          <div class="wt">${esc(b.time)}</div>
+          ${isJordan ? `<div class="by">${esc(b.name)}${b.bc ? ' • between-camps' : ''}</div>${
+            b.notes ? `<div class="note">"${esc(b.notes)}"</div>` : ''
+          }` : ''}
+        </div>
+        <span class="tag">Taken</span>
+      </div>`).join('');
+    return `<div class="slot window">
+      <div class="head">
+        <span class="label">${esc(s.label)}</span>
+        <button class="btn small book-btn"
+          data-id="${esc(s.id)}" data-label="${esc(s.label)}"
+          data-day="${esc(s.day)}" data-date="${esc(s.date)}" data-window="1">Book</button>
+      </div>
+      <div class="window-list">
+        ${list || '<div class="empty">No times taken yet — pick any 1-hour block.</div>'}
+      </div>
+    </div>`;
+  }
+
   if (s.booking) {
     const detail = isJordan
       ? `<span class="by">${esc(s.booking.name)}${s.booking.bc ? ' • between-camps' : ''}</span>` +
@@ -372,8 +425,22 @@ function openBook(id, label, day, date) {
   bookForm.slotId.value = id;
   $('#modal-where').textContent = `${day} (${date}) — ${label}`;
   bookMsg.textContent = '';
+
+  const slotDef = SLOTS.find(s => s.id === id);
+  const timeField = $('#time-field');
+  const timeInput = bookForm.time;
+  if (slotDef && slotDef.window) {
+    timeField.classList.remove('hidden');
+    timeInput.required = true;
+    $('#time-hint').textContent = slotDef.windowHint || '';
+  } else {
+    timeField.classList.add('hidden');
+    timeInput.required = false;
+    timeInput.value = '';
+  }
+
   modal.classList.remove('hidden');
-  setTimeout(() => bookForm.name.focus(), 50);
+  setTimeout(() => (slotDef && slotDef.window ? timeInput : bookForm.name).focus(), 50);
 }
 function closeModal() { modal.classList.add('hidden'); }
 $('#modal-close').addEventListener('click', closeModal);
@@ -389,10 +456,19 @@ bookForm.addEventListener('submit', e => {
   const name = String(fd.get('name')).trim();
   const notes = String(fd.get('notes')||'').trim();
   const bc = fd.get('bc') === 'on';
+  const time = String(fd.get('time')||'').trim();
 
-  // Listed slot vs custom-approved
-  const isCustom = !SLOTS.find(s => s.id === id);
-  if (isCustom) {
+  const slotDef = SLOTS.find(s => s.id === id);
+
+  if (slotDef && slotDef.window) {
+    if (!time) { bookMsg.textContent = 'Pick a 1-hour time frame.'; bookMsg.className='status err'; return; }
+    data.windows[id] = data.windows[id] || [];
+    const taken = data.windows[id].some(b =>
+      b.time.replace(/\s+/g,'').toLowerCase() === time.replace(/\s+/g,'').toLowerCase());
+    if (taken) { bookMsg.textContent = 'That exact time is already taken — pick a different hour.'; bookMsg.className='status err'; return; }
+    data.windows[id].push({ time, name, notes, bc, bookedAt:Date.now() });
+  } else if (!slotDef) {
+    // Custom-approved slot
     const c = data.customApproved.find(x => x.id === id);
     if (!c) { bookMsg.textContent = 'Slot no longer exists.'; bookMsg.className='status err'; return; }
     if (c.name) { bookMsg.textContent = 'Already booked.'; bookMsg.className='status err'; return; }
@@ -454,14 +530,26 @@ function renderAdmin() {
   const con = $('#confirmed');
   const rows = [];
   for (const s of SLOTS) {
-    const b = data.confirmed[s.id];
-    if (b) rows.push(adminBookingHtml(`${s.day} (${s.date}) — ${s.label}`, b, 'listed', s.id));
+    if (s.window) {
+      (data.windows[s.id] || []).forEach((b, i) => {
+        rows.push(adminBookingHtml(`${s.day} (${s.date}) — ${b.time}`, b, 'window', `${s.id}|${i}`));
+      });
+    } else {
+      const b = data.confirmed[s.id];
+      if (b) rows.push(adminBookingHtml(`${s.day} (${s.date}) — ${s.label}`, b, 'listed', s.id));
+    }
   }
   for (const c of data.customApproved) {
     if (c.name) rows.push(adminBookingHtml(`${c.day} (${c.date}) — ${c.label} ⚡custom`, c, 'custom', c.id));
   }
   con.innerHTML = rows.length ? rows.join('') : '<div class="admin-row empty">No bookings yet.</div>';
   $$('#confirmed .remove').forEach(b => b.addEventListener('click', () => removeBooking(b.dataset.kind, b.dataset.id)));
+
+  const resetBtn = $('#reset-btn');
+  if (resetBtn && !resetBtn._wired) {
+    resetBtn.addEventListener('click', resetAll);
+    resetBtn._wired = true;
+  }
 }
 
 function adminBookingHtml(when, b, kind, id) {
@@ -507,9 +595,23 @@ function removeBooking(kind, id) {
   if (!confirm('Remove this booking? The slot will reopen.')) return;
   if (kind === 'listed') {
     delete data.confirmed[id];
+  } else if (kind === 'window') {
+    const [slotId, idx] = id.split('|');
+    if (data.windows[slotId]) {
+      data.windows[slotId].splice(+idx, 1);
+      if (!data.windows[slotId].length) delete data.windows[slotId];
+    }
   } else {
     data.customApproved = data.customApproved.filter(c => c.id !== id);
   }
+  save();
+  render();
+}
+
+// Reset everything (Jordan only — wired up in initJordanControls)
+function resetAll() {
+  if (!confirm('Reset every booking and pending request on this device?')) return;
+  data = empty();
   save();
   render();
 }
