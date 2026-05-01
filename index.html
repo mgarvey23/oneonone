@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>1:1 with Jordan — Burn</title>
+<style>
+  :root {
+    --burn:#003DA5; --burn-dark:#002766; --burn-light:#1E5DD6; --burn-tint:#E6EEFB;
+    --flame:#FF6A13; --ink:#0A1A33; --muted:#5A6B85; --bg:#F4F7FC; --border:#D7E0EE;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; padding:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5; }
+  .hidden { display:none !important; }
+
+  /* Login */
+  #login { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+    background:linear-gradient(135deg,var(--burn-dark),var(--burn) 60%,var(--burn-light)); }
+  .login-card { background:#fff; padding:32px 28px; border-radius:14px; max-width:360px; width:100%;
+    text-align:center; box-shadow:0 24px 60px rgba(0,0,0,0.25); border-top:4px solid var(--flame); }
+  .brand { display:inline-block; letter-spacing:0.4em; font-weight:800; font-size:13px;
+    padding:5px 14px; border:2px solid var(--burn); color:var(--burn); border-radius:999px;
+    text-transform:uppercase; }
+  .brand.white { border-color:#fff; color:#fff; font-size:11px; }
+  .login-card h1 { margin:10px 0 4px; font-size:22px; color:var(--burn-dark); }
+  .login-card p { color:var(--muted); margin:0 0 16px; font-size:14px; }
+
+  /* Hero */
+  .hero { background:linear-gradient(135deg,var(--burn-dark),var(--burn) 60%,var(--burn-light));
+    color:#fff; padding:24px 20px 50px; border-bottom:4px solid var(--flame); }
+  .hero-inner { max-width:960px; margin:0 auto; }
+  .hero-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+  .user { font-size:13px; display:flex; align-items:center; gap:12px; }
+  .link-btn { background:transparent; border:1px solid rgba(255,255,255,0.5); color:#fff;
+    border-radius:999px; padding:4px 12px; font-size:12px; cursor:pointer; }
+  .link-btn:hover { background:rgba(255,255,255,0.1); }
+  .hero h1 { margin:0 0 4px; font-size:clamp(24px,4vw,38px); font-weight:800; letter-spacing:-0.01em; }
+  .hero .sub { margin:0; opacity:0.9; font-size:15px; }
+
+  /* Layout */
+  .container { max-width:960px; margin:-32px auto 40px; padding:0 20px; }
+  .card { background:#fff; border:1px solid var(--border); border-radius:12px; padding:20px 22px;
+    box-shadow:0 8px 24px rgba(0,39,102,0.08); margin-bottom:20px; }
+  .card h2 { margin:0 0 10px; color:var(--burn-dark); font-size:19px; }
+  .card h3 { margin:18px 0 8px; color:var(--burn-dark); font-size:15px; }
+  .muted { color:var(--muted); font-size:14px; }
+
+  /* Day grid */
+  .days { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+  .day { background:#fff; border:1px solid var(--border); border-top:4px solid var(--burn);
+    border-radius:12px; padding:14px 16px; box-shadow:0 8px 24px rgba(0,39,102,0.08); }
+  .day h3 { margin:0 0 10px; color:var(--burn-dark); font-size:16px;
+    display:flex; justify-content:space-between; align-items:baseline; }
+  .day h3 .date { color:var(--muted); font-weight:500; font-size:13px; }
+  .slot { display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
+    padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; }
+  .slot:last-child { margin-bottom:0; }
+  .slot.custom { border-left:4px solid var(--flame); }
+  .slot.booked { background:#F0F2F7; border-color:#E1E5EE; }
+  .slot.booked .label { color:var(--muted); text-decoration:line-through; }
+  .slot .label { font-size:14px; }
+  .slot .by { display:block; font-size:12px; color:var(--muted); margin-top:2px; font-weight:500; }
+  .slot .note { font-size:12px; color:var(--muted); font-style:italic; margin-top:4px; }
+  .slot .tag { background:#9AA7BD; color:#fff; padding:5px 11px; border-radius:6px;
+    font-weight:600; font-size:11px; letter-spacing:0.04em; text-transform:uppercase; white-space:nowrap; }
+
+  /* Forms */
+  label { display:block; font-size:13px; font-weight:600; margin-bottom:10px; }
+  input[type=text], input[type=password], textarea, select {
+    width:100%; margin-top:4px; padding:10px 12px; border:1px solid var(--border);
+    border-radius:8px; font-size:14px; font-family:inherit; background:#fff; color:var(--ink); }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:var(--burn);
+    box-shadow:0 0 0 3px var(--burn-tint); }
+  .check { display:flex; align-items:flex-start; gap:8px; font-weight:500; font-size:13px; }
+  .check input { margin-top:3px; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media (max-width:520px) { .row { grid-template-columns:1fr; } }
+
+  .btn { background:var(--burn); color:#fff; border:none; padding:10px 18px; border-radius:8px;
+    font-weight:700; font-size:13px; cursor:pointer; }
+  .btn:hover { background:var(--burn-dark); }
+  .btn.small { padding:6px 12px; font-size:12px; }
+  .btn.danger { background:transparent; color:var(--muted); border:1px solid var(--border); }
+  .btn.danger:hover { color:#B3261E; border-color:#B3261E; }
+
+  .status { margin-top:8px; font-size:13px; min-height:18px; }
+  .status.ok { color:#1B7F3A; }
+  .status.err { color:#B3261E; }
+
+  /* Modal */
+  .modal { position:fixed; inset:0; background:rgba(10,26,51,0.55);
+    display:flex; align-items:center; justify-content:center; padding:20px; z-index:50; }
+  .modal-card { background:#fff; border-radius:12px; padding:22px; width:100%; max-width:440px;
+    box-shadow:0 20px 50px rgba(0,0,0,0.25); border-top:4px solid var(--burn); position:relative; }
+  .modal-card h3 { margin:0 0 4px; color:var(--burn-dark); }
+  .modal-card .where { margin:0 0 14px; color:var(--muted); font-weight:500; font-size:14px; }
+  .close { position:absolute; top:8px; right:12px; background:none; border:none;
+    font-size:24px; cursor:pointer; color:var(--muted); }
+  .close:hover { color:var(--ink); }
+
+  /* Admin */
+  .admin-row { padding:12px; border:1px solid var(--border); border-radius:8px;
+    margin-bottom:8px; background:#FBFCFE; display:flex; justify-content:space-between; gap:12px; }
+  .admin-row.empty { color:var(--muted); font-style:italic; text-align:center; }
+  .admin-row .when { font-weight:600; color:var(--burn-dark); font-size:13px; }
+  .admin-row .who { font-size:13px; }
+  .admin-row .pref { font-size:12px; color:var(--muted); font-style:italic; margin-top:2px; }
+  .approve-row { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .approve-row input { padding:6px 10px; font-size:12px; flex:1; min-width:70px; }
+  .approve-row button { padding:6px 12px; font-size:12px; }
+
+  .footer { text-align:center; color:var(--muted); padding:16px; font-size:12px; }
+
+  /* Role visibility */
+  body.guest .jordan-only { display:none; }
+  body.jordan .guest-only { display:none; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<section id="login">
+  <div class="login-card">
+    <div class="brand">BURN</div>
+    <h1>1:1 with Jordan</h1>
+    <p>Sign in to book or manage</p>
+    <form id="login-form" style="text-align:left;">
+      <label>Username
+        <input type="text" name="u" autocomplete="username" required />
+      </label>
+      <label>Password
+        <input type="password" name="p" autocomplete="current-password" required />
+      </label>
+      <button type="submit" class="btn" style="width:100%;">Sign in</button>
+      <div id="login-msg" class="status"></div>
+    </form>
+  </div>
+</section>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="hero-top">
+        <div class="brand white">BURN</div>
+        <div class="user">
+          <span id="who"></span>
+          <button id="logout" class="link-btn">Sign out</button>
+        </div>
+      </div>
+      <h1>Book a 1:1 with Jordan</h1>
+      <p class="sub">Pick a time — once a slot is taken it's locked.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <h2>A quick note</h2>
+      <p>Already at the gym for camps? You can meet during the <strong>30-minute window between camps</strong> — check the box on the booking form. Otherwise everyone gets a full hour. Wednesday Jordan is at church after 4:00 PM, so no slots that evening.</p>
+    </div>
+
+    <h2 style="color:var(--burn-dark); margin:0 4px 14px;">Available Slots — Week of 5/4</h2>
+    <div id="days" class="days"></div>
+
+    <!-- Guest: alt request -->
+    <div class="card guest-only" style="margin-top:24px;">
+      <h2>None of these work?</h2>
+      <p class="muted">Drop a day/time. Jordan will approve and it'll appear locked on the schedule.</p>
+      <form id="alt-form">
+        <label>Your name <input type="text" name="name" required maxlength="80" /></label>
+        <label>Preferred day &amp; time
+          <textarea name="pref" required maxlength="500" rows="3"
+            placeholder="e.g., Thursday around 7:30 AM, or Friday late morning..."></textarea>
+        </label>
+        <label class="check">
+          <input type="checkbox" name="bc" />
+          I'd be at the gym for camps — happy with the 30-min between-camps window
+        </label>
+        <button type="submit" class="btn">Send request</button>
+        <div id="alt-msg" class="status"></div>
+      </form>
+    </div>
+
+    <!-- Jordan: admin -->
+    <div class="card jordan-only" style="margin-top:24px; border-top:4px solid var(--flame);">
+      <h2>Admin</h2>
+
+      <h3>Pending custom requests</h3>
+      <div id="pending"></div>
+
+      <h3>All confirmed bookings</h3>
+      <div id="confirmed"></div>
+    </div>
+  </main>
+
+  <footer class="footer">See you in the gym. — Jordan</footer>
+</div>
+
+<!-- BOOKING MODAL -->
+<div id="modal" class="modal hidden">
+  <div class="modal-card">
+    <button class="close" id="modal-close">&times;</button>
+    <h3>Book this slot</h3>
+    <p class="where" id="modal-where"></p>
+    <form id="book-form">
+      <input type="hidden" name="slotId" />
+      <label>Your name <input type="text" name="name" required maxlength="80" /></label>
+      <label>Comments / focus areas
+        <textarea name="notes" maxlength="500" rows="3"
+          placeholder="Anything Jordan should know? Start time within an open window?"></textarea>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="bc" />
+        Use the 30-min between-camps window instead of the full hour
+      </label>
+      <button type="submit" class="btn">Confirm booking</button>
+      <div id="book-msg" class="status"></div>
+    </form>
+  </div>
+</div>
+
+<script>
+// ---------- Config ----------
+const CREDS = {
+  jordan: { pw:'trainer123', role:'jordan', name:'Jordan' },
+  guest:  { pw:'burn',       role:'guest',  name:'Guest'  }
+};
+
+const SLOTS = [
+  { id:'mon-0900', day:'Monday',    date:'5/4', label:'9:00 AM – 10:00 AM' },
+  { id:'mon-1300', day:'Monday',    date:'5/4', label:'1:00 PM – 2:00 PM' },
+  { id:'mon-1400', day:'Monday',    date:'5/4', label:'2:00 PM – 3:00 PM' },
+  { id:'mon-1500', day:'Monday',    date:'5/4', label:'3:00 PM – 4:00 PM' },
+  { id:'tue-mids', day:'Tuesday',   date:'5/5', label:'MIDS only: 8:30 AM – 12:15 PM' },
+  { id:'wed-1030', day:'Wednesday', date:'5/6', label:'10:30 AM – 11:30 AM' },
+  { id:'wed-1130', day:'Wednesday', date:'5/6', label:'11:30 AM – 12:30 PM' },
+  { id:'wed-1400', day:'Wednesday', date:'5/6', label:'2:00 PM – 3:00 PM' },
+  { id:'wed-1500', day:'Wednesday', date:'5/6', label:'3:00 PM – 4:00 PM' },
+  { id:'thu-open', day:'Thursday',  date:'5/7', label:'Anytime after 9:00 AM' },
+  { id:'fri-open', day:'Friday',    date:'5/8', label:'Anytime BEFORE 2:00 PM' },
+  { id:'sat-1000', day:'Saturday',  date:'5/9', label:'10:00 AM – 11:00 AM' }
+];
+const DAY_ORDER = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+// ---------- State ----------
+const STORAGE_KEY = 'burn_bookings_v1';
+const SESSION_KEY = 'burn_session';
+let session = null;
+let data = load();
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || empty(); }
+  catch { return empty(); }
+}
+function empty() { return { confirmed:{}, customApproved:[], customRequests:[] }; }
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+
+// ---------- Helpers ----------
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+// ---------- Auth ----------
+function showLogin() {
+  $('#login').classList.remove('hidden');
+  $('#app').classList.add('hidden');
+  document.body.classList.remove('guest','jordan');
+}
+function showApp() {
+  $('#login').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  document.body.classList.add(session.role);
+  $('#who').textContent = session.name + ' (' + session.role + ')';
+  render();
+}
+
+$('#login-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const u = String(fd.get('u')||'').trim().toLowerCase();
+  const p = String(fd.get('p')||'');
+  const c = CREDS[u];
+  if (!c || c.pw !== p) {
+    $('#login-msg').textContent = 'Invalid username or password.';
+    $('#login-msg').className = 'status err';
+    return;
+  }
+  session = { user:u, role:c.role, name:c.name };
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  $('#login-msg').textContent = '';
+  e.target.reset();
+  showApp();
+});
+
+$('#logout').addEventListener('click', () => {
+  sessionStorage.removeItem(SESSION_KEY);
+  session = null;
+  showLogin();
+});
+
+// ---------- Render ----------
+function render() {
+  renderSlots();
+  if (session.role === 'jordan') renderAdmin();
+}
+
+function allSlots() {
+  const customSlots = data.customApproved.map(c => ({
+    id:c.id, day:c.day, date:c.date, label:c.label, isCustom:true,
+    booking:{ name:c.name, notes:c.notes, bc:c.bc }
+  }));
+  const listed = SLOTS.map(s => ({ ...s, booking: data.confirmed[s.id] || null }));
+  return [...listed, ...customSlots];
+}
+
+function groupByDay(slots) {
+  const groups = {};
+  const order = [];
+  for (const s of slots) {
+    const k = s.day + '|' + s.date;
+    if (!groups[k]) { groups[k] = { day:s.day, date:s.date, slots:[] }; order.push(k); }
+    groups[k].slots.push(s);
+  }
+  order.sort((a,b) => DAY_ORDER.indexOf(a.split('|')[0]) - DAY_ORDER.indexOf(b.split('|')[0]));
+  return order.map(k => groups[k]);
+}
+
+function renderSlots() {
+  const isJordan = session.role === 'jordan';
+  const groups = groupByDay(allSlots());
+  $('#days').innerHTML = groups.map(g => `
+    <div class="day">
+      <h3>${esc(g.day)} <span class="date">${esc(g.date)}</span></h3>
+      ${g.slots.map(s => slotHtml(s, isJordan)).join('')}
+    </div>
+  `).join('');
+  $$('#days .book-btn').forEach(b => {
+    b.addEventListener('click', () => openBook(b.dataset.id, b.dataset.label, b.dataset.day, b.dataset.date));
+  });
+}
+
+function slotHtml(s, isJordan) {
+  const customCls = s.isCustom ? ' custom' : '';
+  if (s.booking) {
+    const detail = isJordan
+      ? `<span class="by">${esc(s.booking.name)}${s.booking.bc ? ' • between-camps' : ''}</span>` +
+        (s.booking.notes ? `<div class="note">"${esc(s.booking.notes)}"</div>` : '')
+      : '';
+    return `<div class="slot booked${customCls}">
+      <span><span class="label">${esc(s.label)}</span>${detail}</span>
+      <span class="tag">Booked</span>
+    </div>`;
+  }
+  return `<div class="slot${customCls}">
+    <span class="label">${esc(s.label)}</span>
+    <button class="btn small book-btn"
+      data-id="${esc(s.id)}" data-label="${esc(s.label)}"
+      data-day="${esc(s.day)}" data-date="${esc(s.date)}">Book</button>
+  </div>`;
+}
+
+// ---------- Booking modal ----------
+const modal = $('#modal');
+const bookForm = $('#book-form');
+const bookMsg = $('#book-msg');
+
+function openBook(id, label, day, date) {
+  bookForm.reset();
+  bookForm.slotId.value = id;
+  $('#modal-where').textContent = `${day} (${date}) — ${label}`;
+  bookMsg.textContent = '';
+  modal.classList.remove('hidden');
+  setTimeout(() => bookForm.name.focus(), 50);
+}
+function closeModal() { modal.classList.add('hidden'); }
+$('#modal-close').addEventListener('click', closeModal);
+modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+});
+
+bookForm.addEventListener('submit', e => {
+  e.preventDefault();
+  const fd = new FormData(bookForm);
+  const id = fd.get('slotId');
+  const name = String(fd.get('name')).trim();
+  const notes = String(fd.get('notes')||'').trim();
+  const bc = fd.get('bc') === 'on';
+
+  // Listed slot vs custom-approved
+  const isCustom = !SLOTS.find(s => s.id === id);
+  if (isCustom) {
+    const c = data.customApproved.find(x => x.id === id);
+    if (!c) { bookMsg.textContent = 'Slot no longer exists.'; bookMsg.className='status err'; return; }
+    if (c.name) { bookMsg.textContent = 'Already booked.'; bookMsg.className='status err'; return; }
+    Object.assign(c, { name, notes, bc, bookedAt:Date.now() });
+  } else {
+    if (data.confirmed[id]) { bookMsg.textContent = 'Already booked.'; bookMsg.className='status err'; return; }
+    data.confirmed[id] = { name, notes, bc, bookedAt:Date.now() };
+  }
+  save();
+  bookMsg.textContent = 'Booked! See you then.';
+  bookMsg.className = 'status ok';
+  setTimeout(() => { closeModal(); render(); }, 700);
+});
+
+// ---------- Custom request (guest) ----------
+const altForm = $('#alt-form');
+altForm.addEventListener('submit', e => {
+  e.preventDefault();
+  const fd = new FormData(altForm);
+  data.customRequests.push({
+    id: 'req-' + Date.now(),
+    name: String(fd.get('name')).trim(),
+    pref: String(fd.get('pref')).trim(),
+    bc: fd.get('bc') === 'on',
+    submittedAt: Date.now()
+  });
+  save();
+  $('#alt-msg').textContent = "Got it — Jordan will approve it.";
+  $('#alt-msg').className = 'status ok';
+  altForm.reset();
+});
+
+// ---------- Admin (Jordan) ----------
+function renderAdmin() {
+  // Pending
+  const pen = $('#pending');
+  if (!data.customRequests.length) {
+    pen.innerHTML = '<div class="admin-row empty">No pending requests.</div>';
+  } else {
+    pen.innerHTML = data.customRequests.map((r, i) => `
+      <div class="admin-row">
+        <div style="flex:1;">
+          <div class="who"><strong>${esc(r.name)}</strong>${r.bc ? ' • between-camps OK' : ''}</div>
+          <div class="pref">"${esc(r.pref)}"</div>
+          <div class="approve-row">
+            <input data-i="${i}" data-f="day"   placeholder="Day" />
+            <input data-i="${i}" data-f="date"  placeholder="5/8" />
+            <input data-i="${i}" data-f="label" placeholder="7:30 AM – 8:30 AM" />
+            <button class="btn small approve" data-i="${i}">Approve</button>
+            <button class="btn small danger deny" data-i="${i}">Deny</button>
+          </div>
+        </div>
+      </div>`).join('');
+    $$('#pending .approve').forEach(b => b.addEventListener('click', () => approve(+b.dataset.i)));
+    $$('#pending .deny').forEach(b => b.addEventListener('click', () => deny(+b.dataset.i)));
+  }
+
+  // Confirmed
+  const con = $('#confirmed');
+  const rows = [];
+  for (const s of SLOTS) {
+    const b = data.confirmed[s.id];
+    if (b) rows.push(adminBookingHtml(`${s.day} (${s.date}) — ${s.label}`, b, 'listed', s.id));
+  }
+  for (const c of data.customApproved) {
+    if (c.name) rows.push(adminBookingHtml(`${c.day} (${c.date}) — ${c.label} ⚡custom`, c, 'custom', c.id));
+  }
+  con.innerHTML = rows.length ? rows.join('') : '<div class="admin-row empty">No bookings yet.</div>';
+  $$('#confirmed .remove').forEach(b => b.addEventListener('click', () => removeBooking(b.dataset.kind, b.dataset.id)));
+}
+
+function adminBookingHtml(when, b, kind, id) {
+  return `<div class="admin-row">
+    <div>
+      <div class="when">${esc(when)}</div>
+      <div class="who">${esc(b.name)}${b.bc ? ' • between-camps' : ''}</div>
+      ${b.notes ? `<div class="pref">"${esc(b.notes)}"</div>` : ''}
+    </div>
+    <button class="btn small danger remove" data-kind="${kind}" data-id="${esc(id)}">Remove</button>
+  </div>`;
+}
+
+function approve(i) {
+  const r = data.customRequests[i];
+  if (!r) return;
+  const inputs = $$(`#pending input[data-i="${i}"]`);
+  const vals = {};
+  inputs.forEach(el => vals[el.dataset.f] = el.value.trim());
+  if (!vals.day || !vals.date || !vals.label) {
+    alert('Fill in Day, Date, and Time label first.');
+    return;
+  }
+  data.customApproved.push({
+    id: 'custom-' + Date.now(),
+    day: vals.day, date: vals.date, label: vals.label,
+    name: r.name, notes: '(custom request) ' + r.pref, bc: !!r.bc,
+    bookedAt: Date.now()
+  });
+  data.customRequests.splice(i, 1);
+  save();
+  render();
+}
+
+function deny(i) {
+  if (!confirm('Remove this pending request?')) return;
+  data.customRequests.splice(i, 1);
+  save();
+  render();
+}
+
+function removeBooking(kind, id) {
+  if (!confirm('Remove this booking? The slot will reopen.')) return;
+  if (kind === 'listed') {
+    delete data.confirmed[id];
+  } else {
+    data.customApproved = data.customApproved.filter(c => c.id !== id);
+  }
+  save();
+  render();
+}
+
+// ---------- Boot ----------
+try { session = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); } catch { session = null; }
+if (session && CREDS[session.user]) showApp(); else showLogin();
+</script>
+</body>
+</html>
