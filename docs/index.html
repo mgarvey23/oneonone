@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>1:1 with Jordan — Burn</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- LOGIN SCREEN -->
+  <section id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="brand-mark">BURN</div>
+      <h1>1:1 with the Head Trainer</h1>
+      <p class="login-sub">Sign in to book or manage</p>
+      <form id="login-form">
+        <label>Username
+          <input type="text" name="username" autocomplete="username" required />
+        </label>
+        <label>Password
+          <input type="password" name="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit" class="btn">Sign in</button>
+        <div id="login-status" class="status" aria-live="polite"></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- MAIN APP (hidden until logged in) -->
+  <div id="app" class="hidden">
+    <header class="hero">
+      <div class="hero-inner">
+        <div class="hero-top">
+          <div class="brand-mark small">BURN</div>
+          <div class="user-chip">
+            <span id="who"></span>
+            <button id="logout" class="link-btn">Sign out</button>
+          </div>
+        </div>
+        <h1>Book a 1:1 with Jordan</h1>
+        <p class="subtitle">Pick a time — once a slot is taken it locks for everyone else.</p>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="info-card">
+        <h2>A quick note</h2>
+        <p>
+          Already at the gym for camps (earlier or PM)? You can meet during the
+          <strong>30-minute window between camps</strong> — check the box on the booking form.
+          Otherwise everyone gets a full hour. Wednesday I'm at church after 4:00 PM, so no slots that evening.
+        </p>
+      </section>
+
+      <section id="slots-section">
+        <h2>Available Slots — Week of 5/4</h2>
+        <div id="days" class="days"></div>
+      </section>
+
+      <!-- Guest-only: alternate-time request form -->
+      <section class="alt-card guest-only">
+        <h2>None of these work?</h2>
+        <p>Drop a day/time below and Jordan will do their best to make it work.</p>
+        <form id="alt-form" class="alt-form">
+          <label>Your name
+            <input type="text" name="name" required maxlength="80" />
+          </label>
+          <label>Preferred day & time
+            <textarea name="preference" required maxlength="500" rows="3"
+              placeholder="e.g., Thursday around 7:30 AM, or Friday late morning..."></textarea>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="betweenCamps" />
+            I'd be at the gym for camps — happy with the 30-min between-camps window
+          </label>
+          <button type="submit" class="btn">Send request</button>
+          <div id="alt-status" class="status" aria-live="polite"></div>
+        </form>
+      </section>
+
+      <!-- Jordan-only: admin panel -->
+      <section class="admin-card jordan-only">
+        <h2>Admin — Manage bookings</h2>
+        <p class="muted">
+          Source of truth is <code>docs/bookings.json</code>. When emails come in, add the booking here,
+          copy the JSON, and paste it into GitHub.
+        </p>
+
+        <h3>Confirmed bookings</h3>
+        <div id="admin-confirmed" class="admin-list"></div>
+
+        <h3>Add a confirmed booking to a listed slot</h3>
+        <form id="admin-add-form" class="stacked">
+          <label>Slot
+            <select name="slotId" id="admin-slot-select" required></select>
+          </label>
+          <div class="row">
+            <label>Name <input type="text" name="name" required maxlength="80" /></label>
+            <label>Start time (optional)
+              <input type="text" name="startTime" maxlength="20" placeholder="e.g., 9:00 AM" />
+            </label>
+          </div>
+          <label>Notes <textarea name="notes" rows="2" maxlength="500"></textarea></label>
+          <button type="submit" class="btn">Add</button>
+        </form>
+
+        <h3>Approve a custom request</h3>
+        <p class="muted">Use this when someone sent you an alternate day/time you want to lock in.</p>
+        <form id="admin-custom-form" class="stacked">
+          <div class="row">
+            <label>Day
+              <select name="day" required>
+                <option value="">—</option>
+                <option>Sunday</option><option>Monday</option><option>Tuesday</option>
+                <option>Wednesday</option><option>Thursday</option><option>Friday</option>
+                <option>Saturday</option>
+              </select>
+            </label>
+            <label>Date <input type="text" name="date" required placeholder="5/8" maxlength="10" /></label>
+          </div>
+          <label>Time label <input type="text" name="label" required maxlength="80" placeholder="7:30 AM – 8:30 AM" /></label>
+          <div class="row">
+            <label>Name <input type="text" name="name" required maxlength="80" /></label>
+            <label class="check">
+              <input type="checkbox" name="betweenCamps" />
+              30-min between-camps slot
+            </label>
+          </div>
+          <label>Notes <textarea name="notes" rows="2" maxlength="500"></textarea></label>
+          <button type="submit" class="btn">Approve & add</button>
+        </form>
+
+        <h3>Save changes</h3>
+        <p class="muted">
+          Click below to copy the updated JSON, then open <code>bookings.json</code> on GitHub and paste it in.
+        </p>
+        <div class="admin-actions">
+          <button id="copy-json" class="btn">Copy updated JSON</button>
+          <a id="edit-on-github" class="btn ghost" target="_blank" rel="noopener">Open bookings.json on GitHub</a>
+          <span id="copy-status" class="status"></span>
+        </div>
+        <textarea id="admin-json-preview" rows="10" readonly></textarea>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>See you in the gym. — Jordan</p>
+    </footer>
+  </div>
+
+  <!-- BOOKING MODAL -->
+  <div id="modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button class="close" id="modal-close" aria-label="Close">&times;</button>
+      <h3 id="modal-title">Book this slot</h3>
+      <p id="modal-slot" class="modal-slot"></p>
+      <form id="book-form">
+        <input type="hidden" name="slotId" />
+        <input type="hidden" name="slotLabel" />
+        <input type="hidden" name="slotDay" />
+        <input type="hidden" name="slotDate" />
+        <label>Your name <input type="text" name="name" required maxlength="80" /></label>
+        <label>Comments / focus areas
+          <textarea name="notes" maxlength="500" rows="3"
+            placeholder="Anything Jordan should know? Start time within an open window?"></textarea>
+        </label>
+        <label class="check">
+          <input type="checkbox" name="betweenCamps" />
+          Use the 30-min between-camps window instead of the full hour
+        </label>
+        <button type="submit" class="btn">Submit booking</button>
+        <div id="book-status" class="status" aria-live="polite"></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

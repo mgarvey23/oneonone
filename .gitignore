@@ -1,4 +1,1 @@
-node_modules/
-data/bookings.json
 .DS_Store
-npm-debug.log*
