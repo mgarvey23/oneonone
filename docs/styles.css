@@ -343,6 +343,13 @@ label.check input { margin-top: 3px; }
 }
 .admin-row .remove:hover { color: #B3261E; border-color: #B3261E; }
 .admin-row.empty { color: var(--muted); font-style: italic; padding: 12px; }
+.admin-row input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.admin-row .btn { padding: 6px 14px; font-size: 13px; }
 form.stacked label { margin-bottom: 10px; }
 .admin-actions {
   display: flex;

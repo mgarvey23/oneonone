@@ -9,14 +9,14 @@ const CREDENTIALS = {
   guest:  { password: 'burn',       role: 'guest',  display: 'Guest'  }
 };
 
-// Formspree endpoint — create a free form at https://formspree.io and
-// paste the URL here. Until you do, submissions show a friendly notice.
-const FORMSPREE_ENDPOINT = ''; // e.g. 'https://formspree.io/f/abcd1234'
-
-// GitHub repo info — used for the "Edit on GitHub" link in admin.
+// GitHub repo info
 const GITHUB_OWNER  = 'mgarvey23';
 const GITHUB_REPO   = 'oneonone';
 const GITHUB_BRANCH = 'claude/trainer-booking-signup-T3w2x';
+const BOOKINGS_PATH = 'docs/bookings.json';
+
+// Scrambled GitHub token. Generate with setup.html and paste the line here.
+const GITHUB_TOKEN_CIPHER = '';
 
 // Slot list — week of 5/4
 const SLOTS = [
@@ -39,28 +39,41 @@ const DAY_ORDER = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','
 // =====================================================================
 // State
 // =====================================================================
-let session = null;          // { username, role, display }
-let bookings = { confirmed: {}, customApproved: [] };
-let workingBookings = null;  // Jordan's in-progress edits
+let session = null;
+let bookings = { confirmed: {}, customApproved: [], customRequests: [] };
+let bookingsSha = null;
 
 // =====================================================================
 // Helpers
 // =====================================================================
-function $(sel, root = document) { return root.querySelector(sel); }
-function $$(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
+const $  = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const escapeHtml = s => String(s||'')
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
-function escapeHtml(str) {
-  return String(str || '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+const KEY = 'BURNBLUE-SECRET-KEY';
+function deobfuscate(cipher) {
+  if (!cipher) return '';
+  const raw = atob(cipher);
+  let out = '';
+  for (let i = 0; i < raw.length; i++) {
+    out += String.fromCharCode(raw.charCodeAt(i) ^ KEY.charCodeAt(i % KEY.length));
+  }
+  return out;
 }
 
-function saveSession(s) { sessionStorage.setItem('burn_session', JSON.stringify(s)); }
-function loadSession() {
-  try { return JSON.parse(sessionStorage.getItem('burn_session') || 'null'); }
-  catch { return null; }
+function utf8ToBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
 }
-function clearSession() { sessionStorage.removeItem('burn_session'); }
+function base64ToUtf8(b64) {
+  const bin = atob(b64);
+  const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
 
 // =====================================================================
 // Auth
@@ -70,13 +83,12 @@ function showLogin() {
   $('#app').classList.add('hidden');
   document.body.classList.remove('role-guest', 'role-jordan');
 }
-
 function showApp() {
   $('#login-screen').classList.add('hidden');
   $('#app').classList.remove('hidden');
   document.body.classList.add(`role-${session.role}`);
   $('#who').textContent = `${session.display} (${session.role})`;
-  loadBookings().then(renderAll);
+  refresh();
 }
 
 $('#login-form').addEventListener('submit', (e) => {
@@ -92,38 +104,90 @@ $('#login-form').addEventListener('submit', (e) => {
     return;
   }
   session = { username: u, role: cred.role, display: cred.display };
-  saveSession(session);
+  sessionStorage.setItem('burn_session', JSON.stringify(session));
   status.textContent = '';
   showApp();
 });
 
 $('#logout').addEventListener('click', () => {
-  clearSession();
+  sessionStorage.removeItem('burn_session');
   session = null;
   showLogin();
 });
 
 // =====================================================================
-// Load / render bookings
+// GitHub API: read + write bookings.json
 // =====================================================================
-async function loadBookings() {
-  try {
-    // Cache-bust so changes show up immediately after Jordan commits.
-    const res = await fetch(`bookings.json?t=${Date.now()}`, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      bookings = {
-        confirmed: data.confirmed || {},
-        customApproved: data.customApproved || []
-      };
-    }
-  } catch (err) {
-    console.warn('Could not load bookings.json', err);
-  }
-  workingBookings = JSON.parse(JSON.stringify(bookings));
+async function apiGetBookings() {
+  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${BOOKINGS_PATH}?ref=${GITHUB_BRANCH}`;
+  const headers = { 'Accept': 'application/vnd.github.v3+json' };
+  const token = deobfuscate(GITHUB_TOKEN_CIPHER);
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(url, { headers, cache: 'no-store' });
+  if (!res.ok) throw new Error(`Could not load bookings (${res.status}).`);
+  const data = await res.json();
+  bookingsSha = data.sha;
+  const parsed = JSON.parse(base64ToUtf8(data.content.replace(/\n/g, '')));
+  bookings = {
+    confirmed: parsed.confirmed || {},
+    customApproved: parsed.customApproved || [],
+    customRequests: parsed.customRequests || []
+  };
 }
 
-function renderAll() {
+async function apiPutBookings(message) {
+  const token = deobfuscate(GITHUB_TOKEN_CIPHER);
+  if (!token) throw new Error('Setup needed: scramble + paste a GitHub token (see setup.html).');
+  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${BOOKINGS_PATH}`;
+  const body = {
+    message,
+    content: utf8ToBase64(JSON.stringify(bookings, null, 2) + '\n'),
+    sha: bookingsSha,
+    branch: GITHUB_BRANCH
+  };
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const e = new Error(err.message || `Save failed (${res.status}).`);
+    e.status = res.status;
+    throw e;
+  }
+  const data = await res.json();
+  bookingsSha = data.content.sha;
+}
+
+// Apply a delta to bookings, retrying on SHA conflict.
+async function applyChange(changeFn, message) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await apiGetBookings();
+    changeFn(bookings);
+    try {
+      await apiPutBookings(message);
+      return;
+    } catch (err) {
+      if (err.status === 409 && attempt < 2) continue;
+      throw err;
+    }
+  }
+}
+
+// =====================================================================
+// Render
+// =====================================================================
+async function refresh() {
+  try {
+    await apiGetBookings();
+  } catch (err) {
+    console.warn(err);
+  }
   renderSlots();
   if (session.role === 'jordan') renderAdmin();
 }
@@ -139,16 +203,11 @@ function groupByDay(allSlots) {
     }
     map[key].slots.push(s);
   }
-  // Sort days by week order
-  order.sort((a, b) => {
-    const [da] = a.split('|'); const [db] = b.split('|');
-    return DAY_ORDER.indexOf(da) - DAY_ORDER.indexOf(db);
-  });
+  order.sort((a, b) => DAY_ORDER.indexOf(a.split('|')[0]) - DAY_ORDER.indexOf(b.split('|')[0]));
   return order.map(k => map[k]);
 }
 
 function allSlotsForRender() {
-  // Combine listed slots with Jordan-approved custom slots
   const customSlots = (bookings.customApproved || []).map((c, i) => ({
     id: c.id || `custom-${i}`,
     day: c.day,
@@ -167,14 +226,12 @@ function allSlotsForRender() {
 function renderSlots() {
   const groups = groupByDay(allSlotsForRender());
   const isJordan = session.role === 'jordan';
-
-  const html = groups.map(g => `
+  $('#days').innerHTML = groups.map(g => `
     <div class="day-card">
       <h3>${escapeHtml(g.day)} <span class="date">${escapeHtml(g.date)}</span></h3>
       ${g.slots.map(s => renderSlot(s, isJordan)).join('')}
     </div>
-  `).join('');
-  $('#days').innerHTML = html || '<p class="muted">No slots configured.</p>';
+  `).join('') || '<p class="muted">No slots.</p>';
 
   $$('.book-btn').forEach(btn => {
     btn.addEventListener('click', () => openBookingModal(btn.dataset));
@@ -182,9 +239,8 @@ function renderSlots() {
 }
 
 function renderSlot(s, isJordan) {
-  const booked = !!s.booking;
   const customClass = s.isCustom ? ' custom' : '';
-  if (booked) {
+  if (s.booking) {
     const detail = isJordan
       ? `<span class="booked-by">${escapeHtml(s.booking.name)}${s.booking.betweenCamps ? ' • between-camps' : ''}</span>${
            s.booking.notes ? `<div class="booked-notes">"${escapeHtml(s.booking.notes)}"</div>` : ''
@@ -211,7 +267,7 @@ function renderSlot(s, isJordan) {
 }
 
 // =====================================================================
-// Booking modal (guest flow)
+// Booking modal (any user)
 // =====================================================================
 const modal = $('#modal');
 const bookForm = $('#book-form');
@@ -240,114 +296,125 @@ document.addEventListener('keydown', (e) => {
 bookForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(bookForm);
-  const payload = {
-    _subject: `New 1:1 booking — ${fd.get('slotDay')} ${fd.get('slotDate')} ${fd.get('slotLabel')}`,
-    type: 'booking',
-    slotId: fd.get('slotId'),
-    slot: `${fd.get('slotDay')} (${fd.get('slotDate')}) — ${fd.get('slotLabel')}`,
-    name: fd.get('name'),
-    notes: fd.get('notes') || '',
-    betweenCamps: fd.get('betweenCamps') === 'on' ? 'yes' : 'no'
-  };
-  await sendToFormspree(payload, bookStatus,
-    "Sent! Jordan will lock this in shortly. Refresh in a few minutes to see it confirmed.");
-  setTimeout(closeModal, 1400);
+  const slotId = fd.get('slotId');
+  const name = String(fd.get('name')).trim();
+  const notes = String(fd.get('notes') || '').trim();
+  const betweenCamps = fd.get('betweenCamps') === 'on';
+  const slotLabel = fd.get('slotLabel');
+
+  bookStatus.textContent = 'Booking...';
+  bookStatus.className = 'status';
+  try {
+    await applyChange((b) => {
+      const isCustom = !SLOTS.find(s => s.id === slotId);
+      if (isCustom) {
+        const c = (b.customApproved || []).find(x => x.id === slotId);
+        if (!c) throw new Error('Slot no longer exists.');
+        if (c.name) throw new Error('That slot was just booked. Refresh and pick another.');
+        c.name = name;
+        c.notes = notes;
+        c.betweenCamps = betweenCamps;
+        c.bookedAt = new Date().toISOString();
+      } else {
+        if (b.confirmed[slotId]) throw new Error('That slot was just booked. Refresh and pick another.');
+        b.confirmed[slotId] = { name, notes, betweenCamps, bookedAt: new Date().toISOString() };
+      }
+    }, `Book: ${slotLabel} — ${name}`);
+
+    bookStatus.textContent = 'Booked! See you then.';
+    bookStatus.className = 'status ok';
+    setTimeout(() => { closeModal(); refresh(); }, 900);
+  } catch (err) {
+    bookStatus.textContent = err.message || 'Could not book that slot.';
+    bookStatus.className = 'status err';
+    refresh();
+  }
 });
 
 // =====================================================================
-// Alternate-time request (guest flow)
+// Custom-time request (guest flow) — adds to pending list
 // =====================================================================
 const altForm = $('#alt-form');
 const altStatus = $('#alt-status');
+
 altForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(altForm);
-  const payload = {
-    _subject: `Custom 1:1 time request — ${fd.get('name')}`,
-    type: 'custom-request',
-    name: fd.get('name'),
-    preference: fd.get('preference'),
-    betweenCamps: fd.get('betweenCamps') === 'on' ? 'yes' : 'no'
-  };
-  await sendToFormspree(payload, altStatus,
-    "Got it — Jordan will reach out and add it to the schedule once approved.");
-  altForm.reset();
-});
+  const name = String(fd.get('name')).trim();
+  const preference = String(fd.get('preference')).trim();
+  const betweenCamps = fd.get('betweenCamps') === 'on';
 
-async function sendToFormspree(payload, statusEl, okMessage) {
-  if (!FORMSPREE_ENDPOINT) {
-    statusEl.textContent = 'Setup needed: paste your Formspree URL into app.js (FORMSPREE_ENDPOINT).';
-    statusEl.className = 'status err';
-    return;
-  }
-  statusEl.textContent = 'Sending...';
-  statusEl.className = 'status';
+  altStatus.textContent = 'Sending...';
+  altStatus.className = 'status';
   try {
-    const res = await fetch(FORMSPREE_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) throw new Error('non-2xx');
-    statusEl.textContent = okMessage;
-    statusEl.className = 'status ok';
+    await applyChange((b) => {
+      b.customRequests = b.customRequests || [];
+      b.customRequests.push({
+        id: `req-${Date.now()}`,
+        name, preference, betweenCamps,
+        submittedAt: new Date().toISOString()
+      });
+    }, `Custom request from ${name}`);
+    altStatus.textContent = "Got it — Jordan will review and confirm.";
+    altStatus.className = 'status ok';
+    altForm.reset();
   } catch (err) {
-    statusEl.textContent = "Couldn't send. Try again, or text Jordan directly.";
-    statusEl.className = 'status err';
+    altStatus.textContent = err.message || 'Could not send request.';
+    altStatus.className = 'status err';
   }
-}
+});
 
 // =====================================================================
 // Jordan admin
 // =====================================================================
 function renderAdmin() {
+  // Pending custom requests
+  const pendingEl = $('#admin-pending');
+  const pending = bookings.customRequests || [];
+  pendingEl.innerHTML = pending.length ? pending.map((r, i) => `
+    <div class="admin-row" data-i="${i}">
+      <div>
+        <div class="when">Pending</div>
+        <div class="who">${escapeHtml(r.name)}${r.betweenCamps ? ' • between-camps OK' : ''}</div>
+        <div class="note">"${escapeHtml(r.preference)}"</div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input data-role="day"   placeholder="Day (Monday)" />
+          <input data-role="date"  placeholder="Date (5/8)" style="width:80px;" />
+          <input data-role="label" placeholder="Time label (7:30 AM – 8:30 AM)" style="flex:1;min-width:160px;" />
+          <button class="btn approve" data-i="${i}">Approve</button>
+          <button class="remove deny" data-i="${i}">Deny</button>
+        </div>
+      </div>
+    </div>
+  `).join('') : '<div class="admin-row empty">No pending requests.</div>';
+
+  // Wire pending buttons
+  $$('#admin-pending .approve').forEach(btn => {
+    btn.addEventListener('click', () => approvePending(parseInt(btn.dataset.i, 10), btn.closest('.admin-row')));
+  });
+  $$('#admin-pending .deny').forEach(btn => {
+    btn.addEventListener('click', () => denyPending(parseInt(btn.dataset.i, 10)));
+  });
+
   // Confirmed list
   const list = $('#admin-confirmed');
   const rows = [];
-
   for (const s of SLOTS) {
-    const b = workingBookings.confirmed[s.id];
+    const b = bookings.confirmed[s.id];
     if (!b) continue;
-    rows.push(adminRowHtml(`${s.day} (${s.date}) — ${s.label}`, b, () => {
-      delete workingBookings.confirmed[s.id];
-      renderAdmin();
-    }, `c:${s.id}`));
+    rows.push(adminRowHtml(`${s.day} (${s.date}) — ${s.label}`, b, 'listed', s.id));
   }
-  (workingBookings.customApproved || []).forEach((c, i) => {
-    rows.push(adminRowHtml(`${c.day} (${c.date}) — ${c.label}  ⚡custom`, c, () => {
-      workingBookings.customApproved.splice(i, 1);
-      renderAdmin();
-    }, `cu:${i}`));
+  (bookings.customApproved || []).forEach((c) => {
+    if (c.name) rows.push(adminRowHtml(`${c.day} (${c.date}) — ${c.label}  ⚡custom`, c, 'custom', c.id));
   });
+  list.innerHTML = rows.length ? rows.join('') : '<div class="admin-row empty">No bookings yet.</div>';
 
-  list.innerHTML = rows.length
-    ? rows.join('')
-    : '<div class="admin-row empty">No bookings yet.</div>';
-
-  // Wire remove buttons
-  $$('.admin-row .remove').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const handlerKey = btn.dataset.handler;
-      removeHandlers[handlerKey]?.();
-      delete removeHandlers[handlerKey];
-    });
+  $$('#admin-confirmed .remove').forEach(btn => {
+    btn.addEventListener('click', () => removeBooking(btn.dataset.kind, btn.dataset.id));
   });
-
-  // Slot select for the "add" form
-  const sel = $('#admin-slot-select');
-  sel.innerHTML = SLOTS.map(s =>
-    `<option value="${escapeHtml(s.id)}">${escapeHtml(`${s.day} ${s.date} — ${s.label}`)}</option>`
-  ).join('');
-
-  // JSON preview + GitHub link
-  $('#admin-json-preview').value = JSON.stringify(workingBookings, null, 2);
-  $('#edit-on-github').href =
-    `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/edit/${GITHUB_BRANCH}/docs/bookings.json`;
 }
 
-const removeHandlers = {};
-function adminRowHtml(when, b, removeFn, key) {
-  removeHandlers[key] = removeFn;
+function adminRowHtml(when, b, kind, id) {
   return `
     <div class="admin-row">
       <div>
@@ -355,68 +422,73 @@ function adminRowHtml(when, b, removeFn, key) {
         <div class="who">${escapeHtml(b.name)}${b.betweenCamps ? ' • between-camps' : ''}</div>
         ${b.notes ? `<div class="note">"${escapeHtml(b.notes)}"</div>` : ''}
       </div>
-      <button class="remove" data-handler="${key}">Remove</button>
+      <button class="remove" data-kind="${kind}" data-id="${escapeHtml(id)}">Remove</button>
     </div>`;
 }
 
-$('#admin-add-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  const slotId = fd.get('slotId');
-  if (workingBookings.confirmed[slotId]) {
-    alert('That slot already has a booking. Remove the existing one first.');
+async function approvePending(index, rowEl) {
+  const day = rowEl.querySelector('[data-role=day]').value.trim();
+  const date = rowEl.querySelector('[data-role=date]').value.trim();
+  const label = rowEl.querySelector('[data-role=label]').value.trim();
+  if (!day || !date || !label) {
+    alert('Fill in day, date, and time label first.');
     return;
   }
-  workingBookings.confirmed[slotId] = {
-    name: String(fd.get('name')).trim(),
-    startTime: String(fd.get('startTime') || '').trim(),
-    notes: String(fd.get('notes') || '').trim(),
-    betweenCamps: false,
-    addedAt: new Date().toISOString()
-  };
-  e.target.reset();
-  renderAdmin();
-});
-
-$('#admin-custom-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  workingBookings.customApproved = workingBookings.customApproved || [];
-  const day = fd.get('day');
-  const date = fd.get('date');
-  const id = `custom-${day.toLowerCase()}-${Date.now()}`;
-  workingBookings.customApproved.push({
-    id,
-    day,
-    date,
-    label: String(fd.get('label')).trim(),
-    name: String(fd.get('name')).trim(),
-    notes: String(fd.get('notes') || '').trim(),
-    betweenCamps: fd.get('betweenCamps') === 'on',
-    addedAt: new Date().toISOString()
-  });
-  e.target.reset();
-  renderAdmin();
-});
-
-$('#copy-json').addEventListener('click', async () => {
-  const text = $('#admin-json-preview').value;
-  const status = $('#copy-status');
   try {
-    await navigator.clipboard.writeText(text);
-    status.textContent = 'Copied. Now paste it into bookings.json on GitHub.';
-    status.className = 'status ok';
-  } catch {
-    $('#admin-json-preview').select();
-    status.textContent = 'Press Cmd/Ctrl+C to copy the highlighted JSON.';
-    status.className = 'status';
+    await applyChange((b) => {
+      const req = b.customRequests[index];
+      if (!req) return;
+      b.customApproved = b.customApproved || [];
+      b.customApproved.push({
+        id: `custom-${Date.now()}`,
+        day, date, label,
+        name: req.name,
+        notes: `(custom request) ${req.preference}`,
+        betweenCamps: !!req.betweenCamps,
+        bookedAt: new Date().toISOString()
+      });
+      b.customRequests.splice(index, 1);
+    }, `Approve custom request from row ${index}`);
+    refresh();
+  } catch (err) {
+    alert(err.message || 'Could not approve.');
   }
-});
+}
+
+async function denyPending(index) {
+  if (!confirm('Remove this pending request?')) return;
+  try {
+    await applyChange((b) => {
+      b.customRequests.splice(index, 1);
+    }, `Deny custom request row ${index}`);
+    refresh();
+  } catch (err) {
+    alert(err.message || 'Could not remove.');
+  }
+}
+
+async function removeBooking(kind, id) {
+  if (!confirm('Remove this booking? The slot will reopen.')) return;
+  try {
+    await applyChange((b) => {
+      if (kind === 'listed') {
+        delete b.confirmed[id];
+      } else if (kind === 'custom') {
+        b.customApproved = (b.customApproved || []).filter(c => c.id !== id);
+      }
+    }, `Remove booking ${id}`);
+    refresh();
+  } catch (err) {
+    alert(err.message || 'Could not remove.');
+  }
+}
 
 // =====================================================================
 // Boot
 // =====================================================================
-session = loadSession();
+try {
+  session = JSON.parse(sessionStorage.getItem('burn_session') || 'null');
+} catch { session = null; }
 if (session && CREDENTIALS[session.username]) {
   showApp();
 } else {

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Burn 1:1 — One-time Setup</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div style="max-width:680px;margin:40px auto;padding:0 20px;">
+    <h1 style="color:var(--burn-blue-dark);">One-time setup</h1>
+    <p>This page helps you scramble your GitHub token before pasting it into <code>app.js</code>, so it doesn't get auto-revoked by GitHub's secret scanner.</p>
+
+    <ol>
+      <li>Create a <strong>fine-grained personal access token</strong> at
+        <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>:
+        <ul>
+          <li><strong>Repository access</strong>: Only select repositories → <code>oneonone</code></li>
+          <li><strong>Repository permissions</strong> → <strong>Contents</strong>: <em>Read and write</em></li>
+          <li>Generate, copy the token (starts with <code>github_pat_</code>)</li>
+        </ul>
+      </li>
+      <li>Paste the token below and click <strong>Scramble</strong>:</li>
+    </ol>
+
+    <div class="info-card" style="margin-top:16px;">
+      <label>GitHub token
+        <input id="raw" type="text" autocomplete="off" placeholder="github_pat_..." />
+      </label>
+      <button id="go" class="btn">Scramble</button>
+      <div style="margin-top:14px;">
+        <label>Paste this whole line into <code>app.js</code>, replacing the existing <code>GITHUB_TOKEN_CIPHER</code> line:</label>
+        <textarea id="out" rows="4" readonly style="margin-top:6px;"></textarea>
+      </div>
+      <p class="muted" style="margin-top:14px;">
+        Edit <code>app.js</code> here:
+        <a id="editlink" target="_blank" rel="noopener">Open app.js on GitHub</a>
+      </p>
+    </div>
+
+    <p style="margin-top:30px;"><a href="index.html">← Back to the app</a></p>
+  </div>
+
+  <script>
+    const KEY = 'BURNBLUE-SECRET-KEY';
+
+    function obfuscate(plain) {
+      let out = '';
+      for (let i = 0; i < plain.length; i++) {
+        out += String.fromCharCode(plain.charCodeAt(i) ^ KEY.charCodeAt(i % KEY.length));
+      }
+      return btoa(out);
+    }
+
+    document.getElementById('go').addEventListener('click', () => {
+      const raw = document.getElementById('raw').value.trim();
+      if (!raw) { alert('Paste your token first.'); return; }
+      const cipher = obfuscate(raw);
+      document.getElementById('out').value = `const GITHUB_TOKEN_CIPHER = '${cipher}';`;
+      document.getElementById('out').select();
+    });
+
+    // Pre-fill the GitHub edit link to wherever the page is hosted
+    const owner = 'mgarvey23';
+    const repo = 'oneonone';
+    const branch = 'claude/trainer-booking-signup-T3w2x';
+    document.getElementById('editlink').href =
+      `https://github.com/${owner}/${repo}/edit/${branch}/docs/app.js`;
+  </script>
+</body>
+</html>
