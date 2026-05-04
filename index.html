@@ -237,7 +237,22 @@
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script>
+// ---------- Firebase ----------
+firebase.initializeApp({
+  apiKey: "AIzaSyCqmLVeWpw4ZbTR8WHFU5Kh8D-OBV8n9Js",
+  authDomain: "jordan-burn-sign-up.firebaseapp.com",
+  databaseURL: "https://jordan-burn-sign-up-default-rtdb.firebaseio.com",
+  projectId: "jordan-burn-sign-up",
+  storageBucket: "jordan-burn-sign-up.firebasestorage.app",
+  messagingSenderId: "932767731278",
+  appId: "1:932767731278:web:c21db80b703cdf6bcfbd1f"
+});
+const db = firebase.database();
+const dataRef = db.ref('data');
+
 // ---------- Config ----------
 const CREDS = {
   jordan: { pw:'trainer123', role:'jordan', name:'Jordan' },
@@ -261,19 +276,30 @@ const SLOTS = [
 const DAY_ORDER = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 // ---------- State ----------
-const STORAGE_KEY = 'burn_bookings_v1';
 const SESSION_KEY = 'burn_session';
 let session = null;
-let data = load();
-
-function load() {
-  try {
-    const d = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
-    return { ...empty(), ...d };
-  } catch { return empty(); }
-}
+let data = empty();
 function empty() { return { confirmed:{}, windows:{}, customApproved:[], customRequests:[] }; }
-function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+
+function objToArr(obj) {
+  if (!obj) return [];
+  return Object.entries(obj).map(([k, v]) => ({ ...v, _key: k }));
+}
+
+// Live subscription — re-renders whenever any device changes data
+dataRef.on('value', snap => {
+  const raw = snap.val() || {};
+  data = {
+    confirmed: raw.confirmed || {},
+    windows: {},
+    customApproved: objToArr(raw.customApproved),
+    customRequests: objToArr(raw.customRequests)
+  };
+  if (raw.windows) {
+    for (const slotId in raw.windows) data.windows[slotId] = objToArr(raw.windows[slotId]);
+  }
+  if (session && CREDS[session.user]) render();
+});
 
 // ---------- Helpers ----------
 const $ = s => document.querySelector(s);
@@ -331,17 +357,14 @@ function allSlots() {
     booking:{ name:c.name, notes:c.notes, bc:c.bc }
   }));
   const listed = SLOTS.map(s => {
-    if (s.window) {
-      return { ...s, windowBookings: data.windows[s.id] || [] };
-    }
+    if (s.window) return { ...s, windowBookings: data.windows[s.id] || [] };
     return { ...s, booking: data.confirmed[s.id] || null };
   });
   return [...listed, ...customSlots];
 }
 
 function groupByDay(slots) {
-  const groups = {};
-  const order = [];
+  const groups = {}; const order = [];
   for (const s of slots) {
     const k = s.day + '|' + s.date;
     if (!groups[k]) { groups[k] = { day:s.day, date:s.date, slots:[] }; order.push(k); }
@@ -367,8 +390,6 @@ function renderSlots() {
 
 function slotHtml(s, isJordan) {
   const customCls = s.isCustom ? ' custom' : '';
-
-  // Window slot: always bookable, lists each chosen 1-hour block
   if (s.window) {
     const list = (s.windowBookings || []).map(b => `
       <div class="window-item">
@@ -392,7 +413,6 @@ function slotHtml(s, isJordan) {
       </div>
     </div>`;
   }
-
   if (s.booking) {
     const detail = isJordan
       ? `<span class="by">${esc(s.booking.name)}${s.booking.bc ? ' • between-camps' : ''}</span>` +
@@ -421,7 +441,6 @@ function openBook(id, label, day, date) {
   bookForm.slotId.value = id;
   $('#modal-where').textContent = `${day} (${date}) — ${label}`;
   bookMsg.textContent = '';
-
   const slotDef = SLOTS.find(s => s.id === id);
   const timeField = $('#time-field');
   const timeInput = bookForm.time;
@@ -434,7 +453,6 @@ function openBook(id, label, day, date) {
     timeInput.required = false;
     timeInput.value = '';
   }
-
   modal.classList.remove('hidden');
   setTimeout(() => (slotDef && slotDef.window ? timeInput : bookForm.name).focus(), 50);
 }
@@ -445,90 +463,97 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
 });
 
-bookForm.addEventListener('submit', e => {
+bookForm.addEventListener('submit', async e => {
   e.preventDefault();
   const fd = new FormData(bookForm);
   const id = fd.get('slotId');
   const name = String(fd.get('name')).trim();
   const notes = String(fd.get('notes')||'').trim();
-  const bc = fd.get('bc') === 'on';
   const time = String(fd.get('time')||'').trim();
-
   const slotDef = SLOTS.find(s => s.id === id);
 
-  if (slotDef && slotDef.window) {
-    if (!time) { bookMsg.textContent = 'Pick a 1-hour time frame.'; bookMsg.className='status err'; return; }
-    data.windows[id] = data.windows[id] || [];
-    const taken = data.windows[id].some(b =>
-      b.time.replace(/\s+/g,'').toLowerCase() === time.replace(/\s+/g,'').toLowerCase());
-    if (taken) { bookMsg.textContent = 'That exact time is already taken — pick a different hour.'; bookMsg.className='status err'; return; }
-    data.windows[id].push({ time, name, notes, bc, bookedAt:Date.now() });
-  } else if (!slotDef) {
-    // Custom-approved slot
-    const c = data.customApproved.find(x => x.id === id);
-    if (!c) { bookMsg.textContent = 'Slot no longer exists.'; bookMsg.className='status err'; return; }
-    if (c.name) { bookMsg.textContent = 'Already booked.'; bookMsg.className='status err'; return; }
-    Object.assign(c, { name, notes, bc, bookedAt:Date.now() });
-  } else {
-    if (data.confirmed[id]) { bookMsg.textContent = 'Already booked.'; bookMsg.className='status err'; return; }
-    data.confirmed[id] = { name, notes, bc, bookedAt:Date.now() };
+  bookMsg.textContent = 'Booking...';
+  bookMsg.className = 'status';
+
+  try {
+    if (slotDef && slotDef.window) {
+      if (!time) throw new Error('Pick a 1-hour time frame.');
+      const arr = data.windows[id] || [];
+      const norm = t => t.replace(/\s+/g,'').toLowerCase();
+      if (arr.some(b => norm(b.time) === norm(time)))
+        throw new Error('That exact time is already taken — pick a different hour.');
+      await dataRef.child('windows/' + id).push({ time, name, notes, bookedAt: Date.now() });
+    } else if (!slotDef) {
+      const c = data.customApproved.find(x => x.id === id);
+      if (!c) throw new Error('Slot no longer exists.');
+      if (c.name) throw new Error('Already booked.');
+      await dataRef.child('customApproved/' + c._key).update({ name, notes, bookedAt: Date.now() });
+    } else {
+      if (data.confirmed[id]) throw new Error('Already booked.');
+      await dataRef.child('confirmed/' + id).set({ name, notes, bookedAt: Date.now() });
+    }
+    bookMsg.textContent = 'Booked! See you then.';
+    bookMsg.className = 'status ok';
+    setTimeout(closeModal, 700);
+  } catch (err) {
+    bookMsg.textContent = err.message || 'Could not save.';
+    bookMsg.className = 'status err';
   }
-  save();
-  bookMsg.textContent = 'Booked! See you then.';
-  bookMsg.className = 'status ok';
-  setTimeout(() => { closeModal(); render(); }, 700);
 });
 
 // ---------- Custom request (guest) ----------
 const altForm = $('#alt-form');
-altForm.addEventListener('submit', e => {
+altForm.addEventListener('submit', async e => {
   e.preventDefault();
   const fd = new FormData(altForm);
-  data.customRequests.push({
-    id: 'req-' + Date.now(),
-    name: String(fd.get('name')).trim(),
-    pref: String(fd.get('pref')).trim(),
-    bc: fd.get('bc') === 'on',
-    submittedAt: Date.now()
-  });
-  save();
-  $('#alt-msg').textContent = "Got it — Jordan will approve it.";
-  $('#alt-msg').className = 'status ok';
-  altForm.reset();
+  $('#alt-msg').textContent = 'Sending...';
+  $('#alt-msg').className = 'status';
+  try {
+    await dataRef.child('customRequests').push({
+      name: String(fd.get('name')).trim(),
+      pref: String(fd.get('pref')).trim(),
+      bc: fd.get('bc') === 'on',
+      submittedAt: Date.now()
+    });
+    $('#alt-msg').textContent = "Got it — Jordan will approve it.";
+    $('#alt-msg').className = 'status ok';
+    altForm.reset();
+  } catch (err) {
+    $('#alt-msg').textContent = 'Could not send. Try again.';
+    $('#alt-msg').className = 'status err';
+  }
 });
 
 // ---------- Admin (Jordan) ----------
 function renderAdmin() {
-  // Pending
   const pen = $('#pending');
   if (!data.customRequests.length) {
     pen.innerHTML = '<div class="admin-row empty">No pending requests.</div>';
   } else {
-    pen.innerHTML = data.customRequests.map((r, i) => `
+    pen.innerHTML = data.customRequests.map(r => `
       <div class="admin-row">
         <div style="flex:1;">
           <div class="who"><strong>${esc(r.name)}</strong>${r.bc ? ' • between-camps OK' : ''}</div>
           <div class="pref">"${esc(r.pref)}"</div>
           <div class="approve-row">
-            <input data-i="${i}" data-f="day"   placeholder="Day" />
-            <input data-i="${i}" data-f="date"  placeholder="5/8" />
-            <input data-i="${i}" data-f="label" placeholder="7:30 AM – 8:30 AM" />
-            <button class="btn small approve" data-i="${i}">Approve</button>
-            <button class="btn small danger deny" data-i="${i}">Deny</button>
+            <input data-key="${esc(r._key)}" data-f="day"   placeholder="Day" />
+            <input data-key="${esc(r._key)}" data-f="date"  placeholder="5/8" />
+            <input data-key="${esc(r._key)}" data-f="label" placeholder="7:30 AM – 8:30 AM" />
+            <button class="btn small approve" data-key="${esc(r._key)}">Approve</button>
+            <button class="btn small danger deny" data-key="${esc(r._key)}">Deny</button>
           </div>
         </div>
       </div>`).join('');
-    $$('#pending .approve').forEach(b => b.addEventListener('click', () => approve(+b.dataset.i)));
-    $$('#pending .deny').forEach(b => b.addEventListener('click', () => deny(+b.dataset.i)));
+    $$('#pending .approve').forEach(b => b.addEventListener('click', () => approve(b.dataset.key)));
+    $$('#pending .deny').forEach(b => b.addEventListener('click', () => deny(b.dataset.key)));
   }
 
-  // Confirmed
   const con = $('#confirmed');
   const rows = [];
   for (const s of SLOTS) {
     if (s.window) {
-      (data.windows[s.id] || []).forEach((b, i) => {
-        rows.push(adminBookingHtml(`${s.day} (${s.date}) — ${b.time}`, b, 'window', `${s.id}|${i}`));
+      (data.windows[s.id] || []).forEach(b => {
+        rows.push(adminBookingHtml(`${s.day} (${s.date}) — ${b.time}`, b, 'window', `${s.id}|${b._key}`));
       });
     } else {
       const b = data.confirmed[s.id];
@@ -559,57 +584,49 @@ function adminBookingHtml(when, b, kind, id) {
   </div>`;
 }
 
-function approve(i) {
-  const r = data.customRequests[i];
+async function approve(key) {
+  const r = data.customRequests.find(x => x._key === key);
   if (!r) return;
-  const inputs = $$(`#pending input[data-i="${i}"]`);
+  const inputs = $$(`#pending input[data-key="${key}"]`);
   const vals = {};
   inputs.forEach(el => vals[el.dataset.f] = el.value.trim());
   if (!vals.day || !vals.date || !vals.label) {
     alert('Fill in Day, Date, and Time label first.');
     return;
   }
-  data.customApproved.push({
+  const newKey = dataRef.child('customApproved').push().key;
+  const updates = {};
+  updates['customApproved/' + newKey] = {
     id: 'custom-' + Date.now(),
     day: vals.day, date: vals.date, label: vals.label,
     name: r.name, notes: '(custom request) ' + r.pref, bc: !!r.bc,
     bookedAt: Date.now()
-  });
-  data.customRequests.splice(i, 1);
-  save();
-  render();
+  };
+  updates['customRequests/' + key] = null;
+  await dataRef.update(updates);
 }
 
-function deny(i) {
+async function deny(key) {
   if (!confirm('Remove this pending request?')) return;
-  data.customRequests.splice(i, 1);
-  save();
-  render();
+  await dataRef.child('customRequests/' + key).remove();
 }
 
-function removeBooking(kind, id) {
+async function removeBooking(kind, id) {
   if (!confirm('Remove this booking? The slot will reopen.')) return;
   if (kind === 'listed') {
-    delete data.confirmed[id];
+    await dataRef.child('confirmed/' + id).remove();
   } else if (kind === 'window') {
-    const [slotId, idx] = id.split('|');
-    if (data.windows[slotId]) {
-      data.windows[slotId].splice(+idx, 1);
-      if (!data.windows[slotId].length) delete data.windows[slotId];
-    }
+    const [slotId, key] = id.split('|');
+    await dataRef.child('windows/' + slotId + '/' + key).remove();
   } else {
-    data.customApproved = data.customApproved.filter(c => c.id !== id);
+    const c = data.customApproved.find(c => c.id === id);
+    if (c) await dataRef.child('customApproved/' + c._key).remove();
   }
-  save();
-  render();
 }
 
-// Reset everything (Jordan only — wired up in initJordanControls)
-function resetAll() {
-  if (!confirm('Reset every booking and pending request on this device?')) return;
-  data = empty();
-  save();
-  render();
+async function resetAll() {
+  if (!confirm('Reset every booking and pending request? This affects every device.')) return;
+  await dataRef.remove();
 }
 
 // ---------- Boot ----------
